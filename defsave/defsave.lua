@@ -124,7 +124,7 @@ function M.load(file)
 	if html5 then
 		-- sys.load can't be used for HTML5 apps running on iframe from a different origin (cross-origin iframe)
 		-- use `localStorage` instead because of this limitation on default IndexedDB storage used by Defold
-		loaded_file = json.decode(html5.run([[(function(){try{return window.localStorage.getItem(']] .. path .. [[')||'{}'}catch(e){return'{}'}})()]]))
+		loaded_file = json.decode(html5_storage.get(path))
 	else
 		loaded_file  = sys.load(path)
 	end
@@ -184,7 +184,7 @@ function M.save(file, force)
 	-- sys.save can't be used for HTML5 apps running on iframe from a different origin (cross-origin iframe)
 	-- use `localStorage` instead because of this limitation on default IndexedDB storage used by Defold
 	local encoded_data = json.encode(M.loaded[file].data):gsub("'", "\'") -- escape ' characters
-	html5.run([[try{window.localStorage.setItem(']] .. path .. [[', ']] .. encoded_data .. [[')}catch(e){}]])
+	html5_storage.set(path, encoded_data)
 
 	is_save_successful = true
 
