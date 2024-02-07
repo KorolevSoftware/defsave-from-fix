@@ -124,9 +124,19 @@ function M.load(file)
 	if html5 then
 		-- sys.load can't be used for HTML5 apps running on iframe from a different origin (cross-origin iframe)
 		-- use `localStorage` instead because of this limitation on default IndexedDB storage used by Defold
-		loaded_file = json.decode(html5_storage.get(path))
+		print("html5_storage.get(path)", html5_storage.get(path))
+		local html_data = html5_storage.get(path)
+		if html_data then
+			local data = html5_storage.decode_base64(html_data)
+			if data then
+				loaded_file = sys.deserialize(data)
+			end
+		else
+			loaded_file = {}
+		end
+		
 	else
-		loaded_file  = sys.load(path)
+		loaded_file = sys.load(path)
 	end
 
 	local empty = false
@@ -181,12 +191,13 @@ function M.save(file, force)
 
 	local is_save_successful;
 	if html5 then
-	-- sys.save can't be used for HTML5 apps running on iframe from a different origin (cross-origin iframe)
-	-- use `localStorage` instead because of this limitation on default IndexedDB storage used by Defold
-	local encoded_data = json.encode(M.loaded[file].data):gsub("'", "\'") -- escape ' characters
-	html5_storage.set(path, encoded_data)
+		-- sys.save can't be used for HTML5 apps running on iframe from a different origin (cross-origin iframe)
+		-- use `localStorage` instead because of this limitation on default IndexedDB storage used by Defold
+		local encoded_data = html5_storage.encode_base64(sys.serialize(M.loaded[file].data))
+		print(encoded_data)
+		html5_storage.set(path, encoded_data)
 
-	is_save_successful = true
+		is_save_successful = true
 
 	else
 		is_save_successful = sys.save(path, M.loaded[file].data)

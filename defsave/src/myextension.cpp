@@ -2,10 +2,47 @@
 #define MODULE_NAME "html5_storage"
 // include the Defold SDK
 #include <dmsdk/sdk.h>
-
+#include <dmsdk/dlib/crypt.h>
 
 #ifdef __EMSCRIPTEN__  // HTML5
 #include <emscripten.h>
+#include <string.h>
+
+
+static int Encode_Base64(lua_State* L)
+{
+    size_t srclen;
+    const char* src = luaL_checklstring(L, 1, &srclen);
+
+    uint32_t dstlen = srclen * 4 / 3 + 4;
+    uint8_t* dst = (uint8_t*)malloc(dstlen);
+    if (!dmCrypt::Base64Encode((uint8_t *)src, srclen, dst, &dstlen)) {
+        free(dst);
+        return luaL_error(L, "Can't encode data into Base64 string.");
+    }
+
+    lua_pushlstring(L, (char *)dst, dstlen);
+    free(dst);
+    return 1;
+}
+
+static int Decode_Base64(lua_State* L)
+{
+    size_t srclen;
+    const char* src = luaL_checklstring(L, 1, &srclen);
+
+    uint32_t dstlen = srclen * 3 / 4;
+    uint8_t* dst = (uint8_t*)malloc(dstlen);
+    if (!dmCrypt::Base64Decode((const uint8_t*)src, srclen, dst, &dstlen))
+    {
+        free(dst);
+        return luaL_error(L, "Can't decode Base64 string.");
+    }
+
+    lua_pushlstring(L, (char*)dst, dstlen);
+    free(dst);
+    return 1;
+}
 
 EM_JS(char*, get_local_storage, (const char* path), {
     let load_data = null;
@@ -14,7 +51,7 @@ EM_JS(char*, get_local_storage, (const char* path), {
     } else { // simple browser
         load_data = window.localStorage.getItem(UTF8ToString(path));
     }
-    return stringToNewUTF8(load_data || '{}');
+    return stringToNewUTF8(load_data || '""');
 });
 
 EM_JS(void, set_local_storage, (const char* path, const char* data), {
@@ -27,8 +64,16 @@ EM_JS(void, set_local_storage, (const char* path, const char* data), {
 
 static int Lua_get_local_storage(lua_State* L) {
     DM_LUA_STACK_CHECK(L, 1);
+    
     char* path = (char*)luaL_checkstring(L, 1);
-    lua_pushstring(L, get_local_storage(path));
+    char* data = get_local_storage(path);
+    
+    if (strcmp(data, "\"\"") == 0) {
+        lua_pushnil(L);
+    } else {
+        lua_pushstring(L, data);
+    }
+    
     return 1;
 }
 
@@ -45,6 +90,9 @@ static int Lua_set_local_storage(lua_State* L) {
 static const luaL_reg Module_methods[] = {
     {"get", Lua_get_local_storage},
     {"set", Lua_set_local_storage},
+    // Base64
+    {"encode_base64", Encode_Base64},
+    {"decode_base64", Decode_Base64},
     {0, 0}
 };
 
