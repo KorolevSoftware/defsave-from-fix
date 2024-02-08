@@ -26,6 +26,39 @@ M.use_serialize = false
 
 M.default_data = {} -- default data to set files to if any cannnot be loaded
 
+
+local get_localStorage =  [[
+(function(is_base64) {
+	try {
+		var data = window.localStorage.getItem("%s");
+		if(is_base64 && data != nil) {
+			return btoa(data);
+		} else {
+			return data || '{}';
+		}
+	} catch(e) {
+		return'{}'
+	}
+}) (%s)
+]]
+
+local set_localStorage =  [[
+(function(is_base64) {
+	try {
+		var path = "%s";
+		var data = "%s";
+		if(is_base64) {
+			window.localStorage.setItem(path, atob(data));
+		} else {
+			window.localStorage.setItem(path, data);
+		}
+		return true;
+	} catch(e) {
+		return false;
+	}
+}) (%s)
+]]
+
 function M.set_appname(appname)
 	assert(type(appname) == "string", "DefSave: set_appname must pass a string")
 	M.appname = appname
@@ -120,12 +153,19 @@ function M.load(file)
 		end
 	end
 
-	local loaded_file
+	local loaded_file = {}
 	if html5 then
 		-- sys.load can't be used for HTML5 apps running on iframe from a different origin (cross-origin iframe)
 		-- use `localStorage` instead because of this limitation on default IndexedDB storage used by Defold
-		
-		loaded_file = json.decode(html5.run([[(function(){try{return window.localStorage.getItem(']] .. path .. [[')||'{}'}catch(e){return'{}'}})()]]))
+		local web_data = html5.run(string.format(get_localStorage, path, tostring(M.use_serialize)))
+
+		if web_data == "{}" then
+			loaded_file = {}
+		elseif M.use_serialize then
+			loaded_file = sys.deserialize(web_data)
+		else
+			loaded_file = json.decode(web_data)
+		end
 	else
 		loaded_file  = sys.load(path)
 	end
@@ -191,11 +231,8 @@ function M.save(file, force)
 		else
 			encoded_data = json.encode(M.loaded[file].data):gsub("'", "\'") -- escape ' characters
 		end
-		
-		html5.run([[try{window.localStorage.setItem(']] .. path .. [[', ']] .. encoded_data .. [[')}catch(e){}]])
-
-		is_save_successful = true
-
+		print(string.format(set_localStorage, path, encoded_data, tostring(M.use_serialize)))
+		is_save_successful = html5.run(string.format(set_localStorage, path, encoded_data, tostring(M.use_serialize)))
 	else
 		is_save_successful = sys.save(path, M.loaded[file].data)
 	end
@@ -203,7 +240,7 @@ function M.save(file, force)
 	if is_save_successful then
 		if M.verbose then print("DefSave: File '" .. tostring(file) .. "' has been saved to the path '" .. path .. "'") end
 		M.loaded[file].changed = false
-		return true
+		return true	
 	else
 		print("DefSave: Something went wrong when attempting to save the file '" .. tostring(file) .. "' to the path '" .. path .. "'")
 		return nil
