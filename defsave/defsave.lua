@@ -28,35 +28,24 @@ M.default_data = {} -- default data to set files to if any cannnot be loaded
 
 
 local get_localStorage =  [[
-(function(is_base64) {
+(function() {
 	try {
-		var data = window.localStorage.getItem("%s");
-		if(is_base64 && data != nil) {
-			return btoa(data);
-		} else {
-			return data || '{}';
-		}
+		return window.localStorage.getItem('%s') || '{}';
 	} catch(e) {
-		return'{}'
+		return'{}';
 	}
-}) (%s)
+}) ()
 ]]
 
 local set_localStorage =  [[
-(function(is_base64) {
+(function() {
 	try {
-		var path = "%s";
-		var data = "%s";
-		if(is_base64) {
-			window.localStorage.setItem(path, atob(data));
-		} else {
-			window.localStorage.setItem(path, data);
-		}
+		window.localStorage.setItem('%s','%s');
 		return true;
 	} catch(e) {
 		return false;
 	}
-}) (%s)
+})()
 ]]
 
 function M.set_appname(appname)
@@ -84,7 +73,6 @@ function M.obfuscate(input, key)
 	return output
 end
 
-
 local function clone(t) -- deep-copy a table
 	if type(t) ~= "table" then return t end
 	local meta = getmetatable(t)
@@ -108,7 +96,6 @@ local function copy(t) -- shallow-copy a table
 	setmetatable(target, meta)
 	return target
 end
-
 
 function M.get_file_path(file)
 	if M.appname == "defsave" then
@@ -157,12 +144,12 @@ function M.load(file)
 	if html5 then
 		-- sys.load can't be used for HTML5 apps running on iframe from a different origin (cross-origin iframe)
 		-- use `localStorage` instead because of this limitation on default IndexedDB storage used by Defold
-		local web_data = html5.run(string.format(get_localStorage, path, tostring(M.use_serialize)))
+		local web_data = html5.run(string.format(get_localStorage, path))
 
 		if web_data == "{}" then
 			loaded_file = {}
 		elseif M.use_serialize then
-			loaded_file = sys.deserialize(web_data)
+			loaded_file = sys.deserialize( defsave_ext.decode_base64(web_data) )
 		else
 			loaded_file = json.decode(web_data)
 		end
@@ -227,12 +214,12 @@ function M.save(file, force)
 		local encoded_data = ""
 
 		if M.use_serialize then
-			encoded_data = sys.serialize(M.loaded[file].data)
+			encoded_data = defsave_ext.encode_base64( sys.serialize(M.loaded[file].data) )
 		else
 			encoded_data = json.encode(M.loaded[file].data):gsub("'", "\'") -- escape ' characters
 		end
-		print(string.format(set_localStorage, path, encoded_data, tostring(M.use_serialize)))
-		is_save_successful = html5.run(string.format(set_localStorage, path, encoded_data, tostring(M.use_serialize)))
+		
+		is_save_successful = html5.run(string.format(set_localStorage, path, encoded_data))
 	else
 		is_save_successful = sys.save(path, M.loaded[file].data)
 	end
